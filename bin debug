@@ -1,1 +1,57 @@
+GDB lx-* commands (lx-symbols, lx-lsmod, lx-ps, lx-dmesg, etc.) don't work on aarch64/arm64 targets, but work fine on x86_64. The symptom is that static local globals
+  (like prb, log_buf, modules) resolve to 0x0 instead of their actual addresses when loading vmlinux symbols in GDB.
+
+- d21176c014a — aarch64: Fix --no-apply-dynamic-relocs for RELR
+  - c9cf7bdfe53 — aarch64: Add DT_RELR support for ILP32 ABI
+  - 961befd6930 — aarch64: Fix DT_RELR support with discarded sections
+  - a71d8768011 — aarch64: Add DT_RELR support
+
+Kernel commit ccb2d173b983 is also needed (adds kernel-side DT_RELR support), with unknown dependencie
+
+reproduce:
+bitbake linux-yocto -c menuconfig
+Kernel Hacking -> kernel debugging
+vmlinux  file  vmlinux  to see if there is debuginfo
+
+bitbake linux-yocto -c devshell
+make scripts_gdb
+
+ export LD_LIBRARY_PATH=gdb-cross-aarch64/13.2-r0/recipe-sysroot-native/usr/lib:$LD_LIBRARY_PATH
+Step 1: Find the modules symbol address
+  
+  $ readelf -s vmlinux | grep -w "modules"
+  129059: ffffffc009494810    16 OBJECT  GLOBAL DEFAULT   23 modules
+  
+  modules is a struct list_head (16 bytes = two 8-byte pointers: next + prev) at address 0xffffffc009494810.
+  
+  Step 2: Check what's actually stored in .data
+  
+  $ objdump -s -j .data vmlinux | grep "ffffffc009494810"
+   ffffffc009494810 00000000 00000000 00000000 00000000  ................
+  
+  All zeros. An empty LIST_HEAD(modules) should be initialized as {next = &modules, prev = &modules} — both pointers pointing to itself.
+  
+  Step 3: Verify relocation entries exist for this address
+  
+  $ readelf -r vmlinux | grep "ffffffc009494810"
+  ffffffc009494810  000000000403 R_AARCH64_RELATIV  -3ff6b6b7f0
+  
+  $ readelf -r vmlinux | grep "ffffffc009494818"
+  ffffffc009494818  000000000403 R_AARCH64_RELATIV  -3ff6b6b7f0
+  
+  Both next (offset +0) and prev (offset +8) have R_AARCH64_RELATIVE relocations.
+  
+  Step 4: Calculate the expected correct value
+  
+  For R_AARCH64_RELATIVE: result = base + addend
+  
+  - Addend = -0x3ff6b6b7f0 → as unsigned 64-bit = 0xffffffc009494810
+  - This equals &modules itself ✓
+  
+  So the kernel boot code would patch:
+  
+  modules.next = 0xffffffc009494810  (pointing to itself = empty list)
+  modules.prev = 0xffffffc009494810  (pointing to itself = empty list)
+  
+
 
