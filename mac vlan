@@ -1,1 +1,18 @@
 
+mac limit
+基于端口的限制，基于mac的丢弃
+
+mac 
+
+难点基于vlan 删除mac，基于, 性能测试删除全部mac，然后学习，有个mac学的特别慢
+
+vlan  
+default  +tag  -tag
+trunk   +tag
+
+vlanif - ip communicate
+
+sub interface
+
+qinq
+4094*4094   802.1ad  12 bit vlan   iner vlan= customer,  outer vlan=service业务
