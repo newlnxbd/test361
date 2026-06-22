@@ -10,6 +10,16 @@ vlan
 default  +tag  -tag
 trunk   +tag
 
+6 bytes + 6 mac + 2 byte + 46-1500+  4(fcs)  64--1518
+
+ip
+
+20 - 60 bytes header
+
+tcp
+
+20-60  header
+
 vlanif - ip communicate
 
 sub interface
