@@ -1,1 +1,101 @@
+Here's a practical path to becoming a Linux kernel expert:
+  
+  1. Foundations
+  
+  - Master C (pointers, memory management, bitwise ops)
+  - Learn computer architecture: CPU modes, MMU, caches, interrupts
+  - Read "Linux Kernel Development" by Robert Love as your first book
+  
+  2. Build & Run
+  
+  - Compile your own kernel from source, tweak configs
+  - Use QEMU/VMs to test without bricking your machine
+  - Learn to read boot logs and use dmesg
+  
+  3. Read the Source
+  
+  - Start with a subsystem you care about (networking, filesystems, drivers)
+  - Use cscope/ctags or elixir.bootlin.com to navigate
+  - Read commit messages — they explain why, not just what
+  
+  4. Write Code
+  
+  - Write a simple kernel module (char device, proc entry)
+  - Pick "good first issue" bugs from the kernel bugzilla
+  - Submit trivial cleanups to staging drivers to learn the patch submission process
+  
+  5. Deep Dive
+  
+  - Study one subsystem thoroughly (scheduler, memory manager, VFS, networking stack)
+  - Read "Understanding the Linux Kernel" (Bovet & Cesati) or "Linux Device Drivers" (Corbet et al.)
+  - Follow LKML discussions in your area of interest
+  
+  6. Debug & Trace
+  
+  - Learn ftrace, perf, eBPF, kprobes
+  - Use KASAN, UBSAN, lockdep to find bugs
+  - Practice crash dump analysis with kdump/crash
+  
+  7. Contribute
+  
+  - Subscribe to a subsystem mailing list
+  - Review others' patches — you learn faster reading than writing
+  - Aim for progressively more complex fixes and features
+  
+  Key mindset shifts:
+  
+  - The kernel has no libc, no exceptions, no safety net — every byte matters
+  - Read more code than you write, especially early on
+  - Pick one subsystem and go deep rather than skimming everything
+  - It takes years — consistency beats intensity
 
+
+##########
+MMU & Virtual Memory
+  
+  - Page tables: 4-level (PGD → PUD → PMD → PTE) on x86_64, each entry is 8 bytes with flags (present, writable, user, NX)
+  - TLB: Translation cache, TLB flushes are expensive — kernel batches them (flush_tlb_range)
+  - Page faults: Hardware triggers #PF → kernel decides: allocate page, swap in, copy-on-write, or segfault
+  - Huge pages: 2MB/1GB pages reduce TLB misses for large allocations
+  - KASLR/KPTI: Security uses of page tables (kernel page table isolation against Meltdown)
+  
+  Study: Trace a virtual address through /proc/<pid>/pagemap, read the page table walk code in arch/x86/mm/.
+  
+  Caches
+  
+  - L1/L2/L3 hierarchy: L1 ~1ns, L2 ~5ns, L3 ~15ns, RAM ~80ns
+  - Cache lines: Typically 64 bytes — misaligned data structures cause extra cache line fetches
+  - Cache coherency: MESI/MOESI protocols across cores, false sharing when two CPUs write to the same cache line
+  - Kernel implications:
+    - ____cacheline_aligned attribute for hot structures
+    - Per-CPU data avoids cache bouncing
+    - likely()/unlikely() hints affect instruction cache prefetch
+    - RCU exists partly because of cache costs of locking
+  
+  Study: Use perf stat to measure L1/LLC cache miss rates, then optimize a data structure to fix them.
+  
+  Interrupts
+  
+  - Hardware interrupts (IRQ): Device signals CPU via interrupt controller (APIC on x86), CPU jumps to IDT entry
+  - Top half vs bottom half: ISR does minimal work (ack hardware, queue work), deferred processing via softirqs/tasklets/workqueues
+  - Softirqs: Fixed set (NET_RX, TIMER, etc.), run after hardware IRQs, can't sleep
+  - Context: Interrupt context has no current->mm, limited stack (~8KB), can't call sleeping functions
+  - IPI (inter-processor interrupt): One CPU pokes another for TLB shootdown, rescheduling, etc.
+  - Interrupt affinity: /proc/irq/<n>/smp_affinity pins IRQs to specific cores
+  
+  Study: Write a driver that registers an interrupt handler, trace the flow with ftrace (irq_handler_entry).
+  
+  Recommended Resources
+  
+  ┌──────────────────┬───────────────────────────────────────────────────────────────────────────────────┐
+  │ Topic            │ Resource                                                                          │
+  ├──────────────────┼───────────────────────────────────────────────────────────────────────────────────┤
+  │ x86 architecture │ Intel SDM Vol. 3 (free PDF), chapters on paging & protection                      │
+  ├──────────────────┼───────────────────────────────────────────────────────────────────────────────────┤
+  │ ARM architecture │ ARM Architecture Reference Manual                                                 │
+  ├──────────────────┼───────────────────────────────────────────────────────────────────────────────────┤
+  │ Practical        │ "Computer Architecture: A Quantitative Approach" (Hennessy & Patterson)           │
+  ├──────────────────┼───────────────────────────────────────────────────────────────────────────────────┤
+  │ Kernel-specific  │ "Linux Kernel in a Nutshell" (Kroah-Hartman), Documentation/x86/ in kernel source │
+  ├──────────────────┼───────────────────────────────────────────────────────────────────────────────────┤
+  │ Hands-on         │ Write an OS from scratch: os.phil-opp.com (Rust) or wiki.osdev.org (C)    
